@@ -1,0 +1,2 @@
+Tests: testsuite
+Depends: git, mercurial, python3-pytest, python3-setuptools, python3-setuptools-scm, python3-toml

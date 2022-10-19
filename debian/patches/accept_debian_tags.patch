@@ -1,0 +1,16 @@
+Description: accept debian version tags
+Author: Julien Puydt
+Forwarded: Debian-specific
+
+--- setuptools-scm.orig/src/setuptools_scm/git.py
++++ setuptools-scm/src/setuptools_scm/git.py
+@@ -153,5 +153,9 @@
+         dirty = False
+ 
+     tag, number, node = describe_output.rsplit("-", 2)
++    if tag.startswith('debian/'):
++        tag = tag[7:]
++    if tag.startswith('upstream/'):
++        tag = tag[9:]
+     number = int(number)
+     return tag, number, node, dirty
