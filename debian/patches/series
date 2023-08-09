@@ -1,1 +1,2 @@
 accept_debian_tags.patch
+fix_autopkgtests_setuptools_68.patch

@@ -1,3 +1,93 @@
+setuptools-scm (7.1.0-4) unstable; urgency=medium
+
+  * Team upload.
+  * Fix autopkgtests with setuptools 68 (Closes: #1040855)
+
+ -- Scott Talbert <swt@techie.net>  Sat, 15 Jul 2023 14:22:32 -0400
+
+setuptools-scm (7.1.0-3) unstable; urgency=medium
+
+  * Team upload.
+  * Revert the explicit Depends, again.
+
+ -- Stefano Rivera <stefanor@debian.org>  Fri, 03 Feb 2023 19:57:15 -0400
+
+setuptools-scm (7.1.0-2) unstable; urgency=medium
+
+  * Add an explicit Depends on python3-tomli, required while Python 3.10 is a
+    supported version. (Closes: #1027947)
+
+ -- Stefano Rivera <stefanor@debian.org>  Sat, 14 Jan 2023 12:13:09 -0400
+
+setuptools-scm (7.1.0-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Bump standards-version.
+  * Refresh the patch to accept debian tags.
+  * Drop the patch to fix upstream #750.
+
+ -- Julien Puydt <jpuydt@debian.org>  Mon, 26 Dec 2022 16:06:18 +0100
+
+setuptools-scm (7.0.5-2) unstable; urgency=medium
+
+  [ Debian Janitor ]
+  * Remove constraints unnecessary since buster (oldstable):
+    + Build-Depends: Drop versioned constraint on python3-setuptools.
+
+ -- Jelmer Vernooĳ <jelmer@debian.org>  Fri, 14 Oct 2022 11:53:59 +0100
+
+setuptools-scm (7.0.5-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Add patch to fix upstream #750.
+
+ -- Julien Puydt <jpuydt@debian.org>  Mon, 25 Jul 2022 11:46:01 +0200
+
+setuptools-scm (7.0.4-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Julien Puydt <jpuydt@debian.org>  Mon, 04 Jul 2022 10:14:55 +0200
+
+setuptools-scm (7.0.2-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Drop now-unneeded fix_python_use.patch.
+  * Rewrite accept_debian_tags.patch.
+  * Bump standards-version to 4.6.1.
+
+ -- Julien Puydt <jpuydt@debian.org>  Sat, 25 Jun 2022 08:30:15 +0200
+
+setuptools-scm (6.4.2-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Add patch to fix a test trying to call 'python'.
+
+ -- Julien Puydt <jpuydt@debian.org>  Wed, 02 Feb 2022 12:07:03 +0100
+
+setuptools-scm (6.3.2-2) unstable; urgency=medium
+
+  * Team upload.
+  * Mark autopkgtest as allow-stderr, setuptools now prints a deprecation
+    warning when setup.py is invoked directly. (Closes: #1002523)
+  * Run autopkgtest for all supported Python 3 versions.
+  * Run autopkgtest out of the source tree, to be sure we're testing the
+    installed module.
+    - Disable 2 tests that can't be run out of the source tree.
+  * Enable more unit tests in autopkgtest, issue resolved upstream.
+  * Build with pybuild's pyproject plugin.
+  * Extend upstream metadata.
+
+ -- Stefano Rivera <stefanor@debian.org>  Wed, 12 Jan 2022 18:36:00 -0400
+
+setuptools-scm (6.3.2-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Add new b-dep on python3-tomli.
+  * Add new autopkgtest dep on python3-virtualenv.
+
+ -- Julien Puydt <jpuydt@debian.org>  Mon, 22 Nov 2021 09:39:22 +0100
+
 setuptools-scm (6.0.1-1) unstable; urgency=medium
 
   * New upstream release.

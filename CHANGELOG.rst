@@ -1,5 +1,151 @@
-v6.0.1
+v7.1.0
+======
+
+* #748: use tomllib from stdlib
+* fix #762: handle non-ascii in setup.cfg
+* #752: implement fallback file finders for archives
+* #765: removed coding header in python template
+* declared Python 3.11 support
+* fix #759: update .git_archival.txt templates match
+  git-describe invocation
+* fix #772: fix handling of .git-archival.txt from tagged commit
+
+v7.0.5
 =======
+
+* fixes #742 , #745: correctly hande accidentally released archival files
+
+v7.0.4
+=======
+
+* fix #727: correctly handle incomplete archivals from setuptools_scm_git_archival
+* fix #691: correctly handle specifying root in pyproject.toml
+* correct root override check condition (to ensure absolute path matching)
+* allow root by the cli to be considered relative to the cli (using abspath)
+
+v7.0.3
+=======
+* fix mercurial usage when pip primes a isolated environment
+* fix regression for branch names on git + add a test
+
+v7.0.2
+=======
+
+* fix #723 and #722: remove bootstrap dependencies
+* bugfix: ensure we read the distribution name from setup.cfg
+  if needed even for pyproject
+
+v7.0.1
+=======
+
+* fix #718: Avoid `ModuleNotFoundError` by requiring importlib_metadata in python < 3.8
+
+v7.0.0
+=======
+
+* drop python 3.6 support
+* include git archival support
+* fix #707: support git version detection even when git protects against mistmatched owners
+            (common with misconfigured containers, thanks @chrisburr )
+
+v6.4.3
+======
+
+* fix #548: correctly handle parsing the commit timestamp of HEAD when ``log.showSignature`` is set
+
+v6.4.2
+======
+
+* fix #671 : NoReturn is not avaliable in painfully dead python 3.6
+
+
+v6.4.1
+=======
+
+
+* fix regression #669: restore get_version signature
+* fix #668: harden the selftest for distribution extras
+
+6.4.0
+======
+
+* compatibility adjustments for setuptools >58
+* only put minimal setuptools version into toml extra to warn people with old strict pins
+* coorectly handle hg-git self-use
+* better mercurial detection
+* modernize packaging setup
+* python 3.10 support
+* better handling of setuptools install command deprecation
+* consider ``pyproject.tomls`` when running as command
+* use list in git describe command to avoid shell expansions while supporting both windows and posix
+* add ``--strip-dev`` flag to ``python -m setuptools_scm`` to print the next guessed version cleanly
+* ensure no-guess-dev will fail on bad tags instead of generating invalid versions
+* ensure we use utc everywhere to avoid confusion
+
+6.3.2
+=====
+
+* fix #629: correctly convert Version data in tags_to_version parser to avoid errors
+
+6.3.1
+=====
+
+* fix #625: restore tomli in install_requires after the regression changes in took it out
+  and some users never added it even tho they have pyproject.toml files
+
+6.3.0
+=======
+
+.. warning::
+
+   This release explicitly warns on unsupported setuptools.
+   This unfortunately has to happen as the legacy ``setup_requires`` mechanism
+   incorrectly configures the setuptools working-set when a more recent setuptools
+   version than available is required.
+
+   As all releases of setuptools are affected as the historic mechanism
+   for ensuring a working setuptools setup was shipping a ``ez_setup`` file
+   next to ``setup.py``, which would install the required version of setuptools.
+
+   This mechanism has long since been deprecated and removed
+   as most people haven't been using it
+
+
+* fix #612: depend on packaging to ensure version parsing parts
+* fix #611: correct the typo that hid away the toml extra and add it in ``setup.py`` as well
+* fix #615: restore support for the git_archive plugin which doesn't pass over the config
+* restore the ability to run on old setuptools while to avoid breaking pipelines
+
+v6.2.0
+=======
+
+* fix #608: resolve tomli dependency issue by making it a hard dependency
+  as all intended/supported install options use pip/wheel this is only a feature release
+* ensure python 3.10 works
+
+v6.1.1
+=======
+
+* fix #605: completely disallow bdist_egg - modern enough setuptools>=45 uses pip
+* fix #606: re-integrate and harden toml parsing
+* fix #597: harden and expand support for figuring the current distribution name from
+  `pyproject.toml` (`project.name` or `tool.setuptools_scm.dist_name`) section or `setup.cfg` (`metadata.name`)
+
+v6.1.0
+======
+
+* fix #587: don't fail file finders when distribution is not given
+* fix #524: new parameters ``normalize`` and ``version_cls`` to customize the version normalization class.
+* fix #585: switch from toml to tomli for toml 1.0 support
+* fix #591: allow to opt in for searching parent directories in the api
+* fix #589: handle yaml encoding using the expected defaults
+* fix #575: recommend storing the version_module inside of ``mypkg/_version.py``
+* fix #571: accept branches starting with ``v`` as release branches
+* fix #557: Use ``packaging.version`` for ``version_tuple``
+* fix #544: enhance errors on unsupported python/setuptools versions
+
+v6.0.1
+======
 
 *  fix #537: drop node_date on old git to avoid errors on missing %cI
 
@@ -210,8 +356,8 @@ v3.0.0
 * require parse results to be ScmVersion or None (breaking change)
 * fix #266 by requiring the prefix word to be a word again
   (breaking change as the bug allowed arbitrary prefixes while the original feature only allowed words")
-* introduce a internal config object to allow the configruation fo tag parsing and prefixes
-  (thanks to @punkadiddle for introducing it and passing it trough)
+* introduce an internal config object to allow the configuration for tag parsing and prefixes
+  (thanks to @punkadiddle for introducing it and passing it through)
 
 v2.1.0
 ======
@@ -228,7 +374,7 @@ v2.0.0
 * fix #237 - correct imports in code examples
 * improve mercurial commit detection (thanks Aaron)
 * breaking change: remove support for setuptools before parsed versions
-* reintroduce manifest as the travis deploy cant use the file finder
+* reintroduce manifest as the travis deploy can't use the file finder
 * reconfigure flake8 for future compatibility with black
 * introduce support for branch name in version metadata and support a opt-in simplified semver version scheme
 
@@ -258,8 +404,8 @@ v1.16.0
 =======
 
 * drop support for eol python versions
-* #214 - fix missuse in surogate-escape api
-* add the node-and-timestamp local version sheme
+* #214 - fix misuse in surogate-escape api
+* add the node-and-timestamp local version scheme
 * respect git export ignores
 * avoid shlex.split on windows
 * fix #218 - better handling of mercurial edge-cases with tag commits
@@ -288,7 +434,7 @@ v1.15.5
 v1.15.4
 =======
 
-* fix issue #164: iterate all found entry points to avoid erros when pip remakes egg-info
+* fix issue #164: iterate all found entry points to avoid errors when pip remakes egg-info
 * enhance self-use to enable pip install from github again
 
 v1.15.3
@@ -319,7 +465,7 @@ v1.15.0
   when considering distance in commits
   (thanks Petre Mierlutiu)
 * fix issue #114: stop trying to be smart for the sdist
-  and ensure its always correctly usign itself
+  and ensure its always correctly using itself
 * update trove classifiers
 * fix issue #84: document using the installed package metadata for sphinx
 * fix issue #81: fail more gracious when git/hg are missing
@@ -334,7 +480,7 @@ v1.14.1
             don't consider untracked file
             (this was a regression due to #86 in v1.13.1)
 * consider the distance 0 when the git node is unknown
-  (happens when you haven't commited anything)
+  (happens when you haven't committed anything)
 
 v1.14.0
 =======
@@ -352,7 +498,7 @@ v1.13.0
 
 * fix regression caused by the fix of #101
   * assert types for version dumping
-  * strictly pass all versions trough parsed version metadata
+  * strictly pass all versions through parsed version metadata
 
 v1.12.0
 =======
@@ -390,7 +536,7 @@ v1.10.0
 * add support for overriding the version number via the
   environment variable SETUPTOOLS_SCM_PRETEND_VERSION
 
-* fix isssue #63 by adding the --match parameter to the git describe call
+* fix issue #63 by adding the --match parameter to the git describe call
   and prepare the possibility of passing more options to scm backends
 
 * fix issue #70 and #71 by introducing the parse keyword
@@ -434,7 +580,7 @@ v1.6.0
   before we would let the setup stay at version 0.0,
   now there is a ValueError
 
-* propperly raise errors on write_to missuse (thanks Te-jé Rodgers)
+* properly raise errors on write_to misuse (thanks Te-jé Rodgers)
 
 v1.5.5
 ======
@@ -471,7 +617,7 @@ v1.5.0
 v1.4.0
 ======
 
-* propper handling for sdist
+* proper handling for sdist
 * fix file-finder failure from windows
 * resuffle docs
 

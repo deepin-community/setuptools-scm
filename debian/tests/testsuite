@@ -2,7 +2,13 @@
 
 set -e
 # setuptools_support and test_pip_download: network access is disabled
-# test_pkg_info_noscmroot and test_use_scm_version_callable: upstream issue #209                                                                             
-TESTS_TO_EXCLUDE="not setuptools_support and not test_pip_download"
-TESTS_TO_EXCLUDE="$TESTS_TO_EXCLUDE and not test_pkginfo_noscmroot and not test_use_scm_version_callable"
-python3 -m pytest -k "$TESTS_TO_EXCLUDE"
+# test_main and test_own_setup_fails_on_old_python: fails outside source tree
+TESTS_TO_EXCLUDE="not (setuptools_support or test_pip_download or test_main"
+TESTS_TO_EXCLUDE="$TESTS_TO_EXCLUDE or test_own_setup_fails_on_old_python)"
+
+cp -a testing $AUTOPKGTEST_TMP
+cd $AUTOPKGTEST_TMP
+
+for py in $(py3versions -s); do
+	$py -m pytest -k "$TESTS_TO_EXCLUDE"
+done
