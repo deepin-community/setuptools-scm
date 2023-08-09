@@ -1,28 +1,47 @@
-import sys
+from __future__ import annotations
+
 import os
-from setuptools_scm import integration
-from setuptools_scm.utils import do, has_command
-from setuptools_scm import git
-import pytest
-from datetime import datetime
-from os.path import join as opj
-from setuptools_scm.file_finder_git import git_find_files
+import shutil
+import subprocess
+import sys
 from datetime import date
-from unittest.mock import patch, Mock
+from datetime import datetime
+from datetime import timezone
+from os.path import join as opj
+from pathlib import Path
+from textwrap import dedent
+from unittest.mock import Mock
+from unittest.mock import patch
+
+import pytest
+
+from .conftest import DebugMode
+from .wd_wrapper import WorkDir
+from setuptools_scm import Configuration
+from setuptools_scm import format_version
+from setuptools_scm import git
+from setuptools_scm import integration
+from setuptools_scm import NonNormalizedVersion
+from setuptools_scm.file_finder_git import git_find_files
+from setuptools_scm.git import archival_to_version
+from setuptools_scm.utils import do
+from setuptools_scm.utils import has_command
 
 pytestmark = pytest.mark.skipif(
     not has_command("git", warn=False), reason="git executable not found"
 )
 
 
-@pytest.fixture
-def wd(wd, monkeypatch):
+@pytest.fixture(name="wd")
+def wd(wd: WorkDir, monkeypatch: pytest.MonkeyPatch, debug_mode: DebugMode) -> WorkDir:
+    debug_mode.disable()
     monkeypatch.delenv("HOME", raising=False)
     wd("git init")
     wd("git config user.email test@example.com")
     wd('git config user.name "a test"')
     wd.add_command = "git add ."
     wd.commit_command = "git commit -m test-{reason}"
+    debug_mode.enable()
     return wd
 
 
@@ -33,12 +52,14 @@ def wd(wd, monkeypatch):
         ("17.33.0-rc-17-g38c3047c0", "17.33.0-rc", 17, "g38c3047c0", False),
     ],
 )
-def test_parse_describe_output(given, tag, number, node, dirty):
+def test_parse_describe_output(
+    given: str, tag: str, number: int, node: str, dirty: bool
+) -> None:
     parsed = git._git_parse_describe(given)
     assert parsed == (tag, number, node, dirty)
 
 
-def test_root_relative_to(tmpdir, wd, monkeypatch):
+def test_root_relative_to(wd: WorkDir, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("SETUPTOOLS_SCM_DEBUG")
     p = wd.cwd.joinpath("sub/package")
     p.mkdir(parents=True)
@@ -48,11 +69,26 @@ setup(use_scm_version={"root": "../..",
                        "relative_to": __file__})
 """
     )
-    res = do((sys.executable, "setup.py", "--version"), p)
+    res = do([sys.executable, "setup.py", "--version"], p)
     assert res == "0.1.dev0"
 
 
-def test_git_gone(wd, monkeypatch):
+def test_root_search_parent_directories(
+    wd: WorkDir, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("SETUPTOOLS_SCM_DEBUG")
+    p = wd.cwd.joinpath("sub/package")
+    p.mkdir(parents=True)
+    p.joinpath("setup.py").write_text(
+        """from setuptools import setup
+setup(use_scm_version={"search_parent_directories": True})
+"""
+    )
+    res = do([sys.executable, "setup.py", "--version"], p)
+    assert res == "0.1.dev0"
+
+
+def test_git_gone(wd: WorkDir, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PATH", str(wd.cwd / "not-existing"))
     with pytest.raises(EnvironmentError, match="'git' was not found"):
         git.parse(str(wd.cwd), git.DEFAULT_DESCRIBE)
@@ -60,7 +96,7 @@ def test_git_gone(wd, monkeypatch):
 
 @pytest.mark.issue("https://github.com/pypa/setuptools_scm/issues/298")
 @pytest.mark.issue(403)
-def test_file_finder_no_history(wd, caplog):
+def test_file_finder_no_history(wd: WorkDir, caplog: pytest.LogCaptureFixture) -> None:
     file_list = git_find_files(str(wd.cwd))
     assert file_list == []
 
@@ -68,14 +104,52 @@ def test_file_finder_no_history(wd, caplog):
 
 
 @pytest.mark.issue("https://github.com/pypa/setuptools_scm/issues/281")
-def test_parse_call_order(wd):
+def test_parse_call_order(wd: WorkDir) -> None:
     git.parse(str(wd.cwd), git.DEFAULT_DESCRIBE)
 
 
-def test_version_from_git(wd):
+@pytest.mark.issue("https://github.com/pypa/setuptools_scm/issues/707")
+@pytest.mark.xfail(run=False, reason="This test requires passwordless sudo")
+def test_not_owner(wd: WorkDir) -> None:
+    git_dir = opj(wd.cwd)
+    original_stat = os.stat(git_dir)
+    if not shutil.which("sudo"):
+        pytest.skip("sudo executable not found")
+
+    proc = subprocess.run(
+        ["sudo", "chown", "-R", "12345", git_dir], stdin=subprocess.DEVNULL
+    )
+    if proc.returncode != 0:
+        pytest.skip("Failed to change ownership, is passwordless sudo available?")
+    try:
+        subprocess.run(
+            ["sudo", "chmod", "a+r", git_dir], stdin=subprocess.DEVNULL, check=True
+        )
+        subprocess.run(
+            ["sudo", "chgrp", "-R", "12345", git_dir],
+            stdin=subprocess.DEVNULL,
+            check=True,
+        )
+        assert git.parse(str(wd.cwd))
+    finally:
+        # Restore the ownership
+        subprocess.run(
+            ["sudo", "chown", "-R", str(original_stat.st_uid), git_dir],
+            stdin=subprocess.DEVNULL,
+            check=True,
+        )
+        subprocess.run(
+            ["sudo", "chgrp", "-R", str(original_stat.st_gid), git_dir],
+            stdin=subprocess.DEVNULL,
+            check=True,
+        )
+
+
+def test_version_from_git(wd: WorkDir) -> None:
     assert wd.version == "0.1.dev0"
 
-    assert git.parse(str(wd.cwd), git.DEFAULT_DESCRIBE).branch == "master"
+    parsed = git.parse(str(wd.cwd), git.DEFAULT_DESCRIBE)
+    assert parsed is not None and parsed.branch == "master"
 
     wd.commit_testfile()
     assert wd.version.startswith("0.1.dev1+g")
@@ -104,16 +178,79 @@ def test_version_from_git(wd):
     wd("git tag 17.33.0-rc")
     assert wd.version == "17.33.0rc0"
 
+    # custom normalization
+    assert wd.get_version(normalize=False) == "17.33.0-rc"
+    assert wd.get_version(version_cls=NonNormalizedVersion) == "17.33.0-rc"
+    assert (
+        wd.get_version(version_cls="setuptools_scm.NonNormalizedVersion")
+        == "17.33.0-rc"
+    )
+
+
+setup_py_with_normalize: dict[str, str] = {
+    "false": """
+        from setuptools import setup
+        setup(use_scm_version={'normalize': False, 'write_to': 'VERSION.txt'})
+        """,
+    "with_created_class": """
+        from setuptools import setup
+
+        class MyVersion:
+            def __init__(self, tag_str: str):
+                self.version = tag_str
+
+            def __repr__(self):
+                return self.version
+
+        setup(use_scm_version={'version_cls': MyVersion, 'write_to': 'VERSION.txt'})
+        """,
+    "with_named_import": """
+        from setuptools import setup
+        setup(use_scm_version={
+            'version_cls': 'setuptools_scm.NonNormalizedVersion',
+            'write_to': 'VERSION.txt'
+        })
+        """,
+}
+
+
+@pytest.mark.parametrize(
+    "setup_py_txt",
+    [pytest.param(text, id=key) for key, text in setup_py_with_normalize.items()],
+)
+def test_git_version_unnormalized_setuptools(
+    setup_py_txt: str, wd: WorkDir, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    Test that when integrating with setuptools without normalization,
+    the version is not normalized in write_to files,
+    but still normalized by setuptools for the final dist metadata.
+    """
+    monkeypatch.delenv("SETUPTOOLS_SCM_DEBUG")
+
+    wd.write("setup.py", dedent(setup_py_txt))
+
+    # do git operations and tag
+    wd.commit_testfile()
+    wd("git tag 17.33.0-rc1")
+
+    # setuptools still normalizes using packaging.Version (removing the dash)
+    res = wd([sys.executable, "setup.py", "--version"])
+    assert res == "17.33.0rc1"
+
+    # but the version tag in the file is non-normalized (with the dash)
+    assert wd.cwd.joinpath("VERSION.txt").read_text() == "17.33.0-rc1"
+
 
 @pytest.mark.issue(179)
-def test_unicode_version_scheme(wd):
+def test_unicode_version_scheme(wd: WorkDir) -> None:
     scheme = b"guess-next-dev".decode("ascii")
     assert wd.get_version(version_scheme=scheme)
 
 
 @pytest.mark.issue(108)
 @pytest.mark.issue(109)
-def test_git_worktree(wd):
+def test_git_worktree(wd: WorkDir) -> None:
     wd.write("test.txt", "test2")
     # untracked files dont change the state
     assert wd.version == "0.1.dev0"
@@ -123,7 +260,9 @@ def test_git_worktree(wd):
 
 @pytest.mark.issue(86)
 @pytest.mark.parametrize("today", [False, True])
-def test_git_dirty_notag(today, wd, monkeypatch):
+def test_git_dirty_notag(
+    today: bool, wd: WorkDir, monkeypatch: pytest.MonkeyPatch
+) -> None:
     if today:
         monkeypatch.delenv("SOURCE_DATE_EPOCH", raising=False)
     wd.commit_testfile()
@@ -132,7 +271,7 @@ def test_git_dirty_notag(today, wd, monkeypatch):
     assert wd.version.startswith("0.1.dev1")
     if today:
         # the date on the tag is in UTC
-        tag = datetime.utcnow().date().strftime(".d%Y%m%d")
+        tag = datetime.now(timezone.utc).date().strftime(".d%Y%m%d")
     else:
         tag = ".d20090213"
     # we are dirty, check for the tag
@@ -140,46 +279,50 @@ def test_git_dirty_notag(today, wd, monkeypatch):
 
 
 @pytest.mark.issue(193)
-def test_git_worktree_support(wd, tmpdir):
+@pytest.mark.xfail(reason="sometimes relative path results")
+def test_git_worktree_support(wd: WorkDir, tmp_path: Path) -> None:
     wd.commit_testfile()
-    worktree = tmpdir.join("work_tree")
+    worktree = tmp_path / "work_tree"
     wd("git worktree add -b work-tree %s" % worktree)
 
     res = do([sys.executable, "-m", "setuptools_scm", "ls"], cwd=worktree)
+    assert "test.txt" in res
     assert str(worktree) in res
 
 
 @pytest.fixture
-def shallow_wd(wd, tmpdir):
+def shallow_wd(wd: WorkDir, tmp_path: Path) -> Path:
     wd.commit_testfile()
     wd.commit_testfile()
     wd.commit_testfile()
-    target = tmpdir.join("wd_shallow")
+    target = tmp_path / "wd_shallow"
     do(["git", "clone", "file://%s" % wd.cwd, str(target), "--depth=1"])
     return target
 
 
-def test_git_parse_shallow_warns(shallow_wd, recwarn):
+def test_git_parse_shallow_warns(
+    shallow_wd: Path, recwarn: pytest.WarningsRecorder
+) -> None:
     git.parse(str(shallow_wd))
     msg = recwarn.pop()
     assert "is shallow and may cause errors" in str(msg.message)
 
 
-def test_git_parse_shallow_fail(shallow_wd):
-    with pytest.raises(ValueError) as einfo:
+def test_git_parse_shallow_fail(shallow_wd: Path) -> None:
+    with pytest.raises(ValueError, match="git fetch"):
         git.parse(str(shallow_wd), pre_parse=git.fail_on_shallow)
 
-    assert "git fetch" in str(einfo.value)
 
-
-def test_git_shallow_autocorrect(shallow_wd, recwarn):
+def test_git_shallow_autocorrect(
+    shallow_wd: Path, recwarn: pytest.WarningsRecorder
+) -> None:
     git.parse(str(shallow_wd), pre_parse=git.fetch_on_shallow)
     msg = recwarn.pop()
     assert "git fetch was used to rectify" in str(msg.message)
     git.parse(str(shallow_wd), pre_parse=git.fail_on_shallow)
 
 
-def test_find_files_stop_at_root_git(wd):
+def test_find_files_stop_at_root_git(wd: WorkDir) -> None:
     wd.commit_testfile()
     project = wd.cwd / "project"
     project.mkdir()
@@ -188,18 +331,20 @@ def test_find_files_stop_at_root_git(wd):
 
 
 @pytest.mark.issue(128)
-def test_parse_no_worktree(tmpdir):
-    ret = git.parse(str(tmpdir))
+def test_parse_no_worktree(tmp_path: Path) -> None:
+    ret = git.parse(str(tmp_path))
     assert ret is None
 
 
-def test_alphanumeric_tags_match(wd):
+def test_alphanumeric_tags_match(wd: WorkDir) -> None:
     wd.commit_testfile()
     wd("git tag newstyle-development-started")
     assert wd.version.startswith("0.1.dev1+g")
 
 
-def test_git_archive_export_ignore(wd, monkeypatch):
+def test_git_archive_export_ignore(
+    wd: WorkDir, monkeypatch: pytest.MonkeyPatch
+) -> None:
     wd.write("test1.txt", "test")
     wd.write("test2.txt", "test")
     wd.write(
@@ -215,8 +360,8 @@ def test_git_archive_export_ignore(wd, monkeypatch):
 
 
 @pytest.mark.issue(228)
-def test_git_archive_subdirectory(wd, monkeypatch):
-    wd("mkdir foobar")
+def test_git_archive_subdirectory(wd: WorkDir, monkeypatch: pytest.MonkeyPatch) -> None:
+    os.mkdir(wd.cwd / "foobar")
     wd.write("foobar/test1.txt", "test")
     wd("git add foobar")
     wd.commit()
@@ -225,8 +370,10 @@ def test_git_archive_subdirectory(wd, monkeypatch):
 
 
 @pytest.mark.issue(251)
-def test_git_archive_run_from_subdirectory(wd, monkeypatch):
-    wd("mkdir foobar")
+def test_git_archive_run_from_subdirectory(
+    wd: WorkDir, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    os.mkdir(wd.cwd / "foobar")
     wd.write("foobar/test1.txt", "test")
     wd("git add foobar")
     wd.commit()
@@ -234,7 +381,15 @@ def test_git_archive_run_from_subdirectory(wd, monkeypatch):
     assert integration.find_files(".") == [opj(".", "test1.txt")]
 
 
-def test_git_feature_branch_increments_major(wd):
+@pytest.mark.issue("https://github.com/pypa/setuptools_scm/issues/728")
+def test_git_branch_names_correct(wd: WorkDir) -> None:
+    wd.commit_testfile()
+    wd("git checkout -b test/fun")
+    wd_git = git.GitWorkdir(os.fspath(wd.cwd))
+    assert wd_git.get_branch() == "test/fun"
+
+
+def test_git_feature_branch_increments_major(wd: WorkDir) -> None:
     wd.commit_testfile()
     wd("git tag 1.0.0")
     wd.commit_testfile()
@@ -245,7 +400,7 @@ def test_git_feature_branch_increments_major(wd):
 
 
 @pytest.mark.issue("https://github.com/pypa/setuptools_scm/issues/303")
-def test_not_matching_tags(wd):
+def test_not_matching_tags(wd: WorkDir) -> None:
     wd.commit_testfile()
     wd("git tag apache-arrow-0.11.1")
     wd.commit_testfile()
@@ -259,21 +414,21 @@ def test_not_matching_tags(wd):
 
 @pytest.mark.issue("https://github.com/pypa/setuptools_scm/issues/411")
 @pytest.mark.xfail(reason="https://github.com/pypa/setuptools_scm/issues/449")
-def test_non_dotted_version(wd):
+def test_non_dotted_version(wd: WorkDir) -> None:
     wd.commit_testfile()
     wd("git tag apache-arrow-1")
     wd.commit_testfile()
     assert wd.get_version().startswith("2")
 
 
-def test_non_dotted_version_with_updated_regex(wd):
+def test_non_dotted_version_with_updated_regex(wd: WorkDir) -> None:
     wd.commit_testfile()
     wd("git tag apache-arrow-1")
     wd.commit_testfile()
     assert wd.get_version(tag_regex=r"^apache-arrow-([\.0-9]+)$").startswith("2")
 
 
-def test_non_dotted_tag_no_version_match(wd):
+def test_non_dotted_tag_no_version_match(wd: WorkDir) -> None:
     wd.commit_testfile()
     wd("git tag apache-arrow-0.11.1")
     wd.commit_testfile()
@@ -283,8 +438,8 @@ def test_non_dotted_tag_no_version_match(wd):
 
 
 @pytest.mark.issue("https://github.com/pypa/setuptools_scm/issues/381")
-def test_gitdir(monkeypatch, wd):
-    """"""
+def test_gitdir(monkeypatch: pytest.MonkeyPatch, wd: WorkDir) -> None:
+    """ """
     wd.commit_testfile()
     normal = wd.version
     # git hooks set this and break subsequent setuptools_scm unless we clean
@@ -292,12 +447,15 @@ def test_gitdir(monkeypatch, wd):
     assert wd.version == normal
 
 
-def test_git_getdate(wd):
+def test_git_getdate(wd: WorkDir) -> None:
     # TODO: case coverage for git wd parse
     today = date.today()
 
-    def parse_date():
-        return git.parse(os.fspath(wd.cwd)).node_date
+    def parse_date() -> date:
+        parsed = git.parse(os.fspath(wd.cwd))
+        assert parsed is not None
+        assert parsed.node_date is not None
+        return parsed.node_date
 
     git_wd = git.GitWorkdir(os.fspath(wd.cwd))
     assert git_wd.get_head_date() is None
@@ -305,14 +463,92 @@ def test_git_getdate(wd):
 
     wd.commit_testfile()
     assert git_wd.get_head_date() == today
-    meta = git.parse(os.fspath(wd.cwd))
-    assert meta.node_date == today
+    assert parse_date() == today
 
 
-def test_git_getdate_badgit(
-    wd,
-):
+def test_git_getdate_badgit(wd: WorkDir) -> None:
     wd.commit_testfile()
     git_wd = git.GitWorkdir(os.fspath(wd.cwd))
     with patch.object(git_wd, "do_ex", Mock(return_value=("%cI", "", 0))):
         assert git_wd.get_head_date() is None
+
+
+@pytest.fixture
+def signed_commit_wd(monkeypatch: pytest.MonkeyPatch, wd: WorkDir) -> WorkDir:
+    if not has_command("gpg", args=["--version"], warn=False):
+        pytest.skip("gpg executable not found")
+
+    wd.write(
+        ".gpg_batch_params",
+        """\
+%no-protection
+%transient-key
+Key-Type: RSA
+Key-Length: 2048
+Name-Real: a test
+Name-Email: test@example.com
+Expire-Date: 0
+""",
+    )
+    monkeypatch.setenv("GNUPGHOME", str(wd.cwd.resolve(strict=True)))
+    wd("gpg --batch --generate-key .gpg_batch_params")
+
+    wd("git config log.showSignature true")
+    wd.signed_commit_command = "git commit -S -m test-{reason}"
+    return wd
+
+
+@pytest.mark.issue("https://github.com/pypa/setuptools_scm/issues/548")
+def test_git_getdate_signed_commit(signed_commit_wd: WorkDir) -> None:
+    today = date.today()
+    signed_commit_wd.commit_testfile(signed=True)
+    git_wd = git.GitWorkdir(os.fspath(signed_commit_wd.cwd))
+    assert git_wd.get_head_date() == today
+
+
+@pytest.mark.parametrize(
+    "expected, from_data",
+    [
+        (
+            "1.0",
+            {"describe-name": "1.0-0-g0000"},
+        ),
+        (
+            "1.1.dev3+g0000",
+            {
+                "describe-name": "1.0-3-g0000",
+                "node": "0" * 20,
+            },
+        ),
+        ("0.0", {"node": "0" * 20}),
+        ("1.2.2", {"describe-name": "release-1.2.2-0-g00000"}),
+        ("1.2.2.dev0", {"ref-names": "tag: release-1.2.2.dev"}),
+        ("1.2.2", {"describe-name": "v1.2.2"}),
+    ],
+)
+@pytest.mark.filterwarnings("ignore:git archive did not support describe output")
+def test_git_archival_to_version(expected: str, from_data: dict[str, str]) -> None:
+    config = Configuration()
+    version = archival_to_version(from_data, config=config)
+    assert version is not None
+    assert (
+        format_version(
+            version, version_scheme="guess-next-dev", local_scheme="node-and-date"
+        )
+        == expected
+    )
+
+
+@pytest.mark.issue("https://github.com/pypa/setuptools_scm/issues/727")
+def test_git_archival_node_missing_no_version() -> None:
+    config = Configuration()
+    version = archival_to_version({}, config=config)
+    assert version is None
+
+
+def test_git_archival_from_unfiltered() -> None:
+    config = Configuration()
+
+    with pytest.warns(UserWarning, match="unexported git archival found"):
+        version = archival_to_version({"node": "$Format:%H$"}, config=config)
+    assert version is None

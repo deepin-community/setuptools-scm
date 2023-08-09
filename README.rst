@@ -1,20 +1,19 @@
 setuptools_scm
 ==============
 
-``setuptools_scm`` handles managing your Python package versions
-in SCM metadata instead of declaring them as the version argument
+``setuptools_scm`` extracts Python package versions from ``git`` or
+``hg`` metadata instead of declaring them as the version argument
 or in a SCM managed file.
 
-Additionally ``setuptools_scm`` provides setuptools with a list of files that are managed by the SCM
-(i.e. it automatically adds all of the SCM-managed files to the sdist).
-Unwanted files must be excluded by discarding them via ``MANIFEST.in``.
+Additionally ``setuptools_scm`` provides setuptools with a list of
+files that are managed by the SCM (i.e. it automatically adds all of
+the SCM-managed files to the sdist). Unwanted files must be excluded
+by discarding them via ``MANIFEST.in``.
 
-``setuptools_scm`` support the following scm out of the box:
+``setuptools_scm`` supports the following scm out of the box:
 
 * git
 * mercurial
-
-
 
 .. image:: https://github.com/pypa/setuptools_scm/workflows/python%20tests+artifacts+release/badge.svg
     :target: https://github.com/pypa/setuptools_scm/actions
@@ -41,9 +40,7 @@ built step by specifying it as one of the build requirements.
 
     # pyproject.toml
     [build-system]
-    requires = ["setuptools>=42", "wheel", "setuptools_scm[toml]>=3.4"]
-
-Note that the ``toml`` extra must be supplied.
+    requires = ["setuptools>=45", "setuptools_scm[toml]>=6.2"]
 
 That will be sufficient to require ``setuptools_scm`` for projects
 that support PEP 518 (`pip <https://pypi.org/project/pip>`_ and
@@ -53,7 +50,17 @@ continue to rely on ``setup_requires``. For maximum compatibility
 with those uses, consider also including a ``setup_requires`` directive
 (described below in ``setup.py usage`` and ``setup.cfg``).
 
-To enable version inference, add this section to your pyproject.toml:
+To enable version inference, you need to set the version
+dynamically in the ``project`` section of ``pyproject.toml``:
+
+.. code:: toml
+
+    # pyproject.toml
+    [project]
+    # version = "0.0.1"  # Remove any existing version parameter.
+    dynamic = ["version"]
+
+Then add this section to your ``pyproject.toml``:
 
 .. code:: toml
 
@@ -68,13 +75,30 @@ to be supplied to ``get_version()``. For example:
 .. code:: toml
 
     # pyproject.toml
-
     [tool.setuptools_scm]
-    write_to = "pkg/version.py"
+    write_to = "pkg/_version.py"
+
+Where ``pkg`` is the name of your package.
+
+If you need to confirm which version string is being generated
+or debug the configuration, you can install
+`setuptools-scm <https://github.com/pypa/setuptools_scm>`_
+directly in your working environment and run:
+
+.. code-block:: shell
+
+    $ python -m setuptools_scm
+
+    # To explore other options, try:
+    $ python -m setuptools_scm --help
 
 
-``setup.py`` usage
-------------------
+``setup.py`` usage (deprecated)
+-------------------------------
+
+.. warning::
+
+   ``setup_requires`` has been deprecated in favor of ``pyproject.toml``
 
 The following settings are considered legacy behavior and
 superseded by the ``pyproject.toml`` usage, but for maximal
@@ -129,50 +153,12 @@ You can confirm the version number locally via ``setup.py``:
    not defined in ``setup.cfg``.
 
 
-``setup.cfg`` usage
--------------------
+``setup.cfg`` usage (deprecated)
+------------------------------------
 
-If using `setuptools 30.3.0
-<https://setuptools.readthedocs.io/en/latest/setuptools.html#configuring-setup-using-setup-cfg-files>`_
-or greater, you can store ``setup_requires`` configuration in ``setup.cfg``.
-However, ``use_scm_version`` must still be placed in ``setup.py``. For example:
-
-.. code:: python
-
-    # setup.py
-    from setuptools import setup
-    setup(
-        use_scm_version=True,
-    )
-
-.. code:: ini
-
-    # setup.cfg
-    [metadata]
-    ...
-
-    [options]
-    setup_requires =
-      setuptools_scm
-    ...
-
-.. important::
-
-    Ensure neither the ``[metadata]`` ``version`` option nor the ``[egg_info]``
-    section are defined, as these will interfere with ``setuptools_scm``.
-
-You may also need to define a ``pyproject.toml`` file (`PEP-0518
-<https://www.python.org/dev/peps/pep-0518>`_) to ensure you have the required
-version of ``setuptools``:
-
-.. code:: ini
-
-    # pyproject.toml
-    [build-system]
-    requires = ["setuptools>=30.3.0", "wheel", "setuptools_scm"]
-
-For more information, refer to the `setuptools issue #1002
-<https://github.com/pypa/setuptools/issues/1002>`_.
+as ``setup_requires`` is deprecated in favour of ``pyproject.toml``
+usage in ``setup.cfg`` is considered deprecated,
+please use ``pyproject.toml`` whenever possible.
 
 
 Programmatic usage
@@ -186,7 +172,7 @@ than the project's root, you can use:
     from setuptools_scm import get_version
     version = get_version(root='..', relative_to=__file__)
 
-See `setup.py Usage`_ above for how to use this within ``setup.py``.
+See `setup.py Usage (deprecated)`_ above for how to use this within ``setup.py``.
 
 
 Retrieving package version at runtime
@@ -208,7 +194,7 @@ or the `importlib_metadata`_ backport:
         pass
 
 Alternatively, you can use ``pkg_resources`` which is included in
-``setuptools``:
+``setuptools`` (but has a significant runtime cost):
 
 .. code:: python
 
@@ -231,13 +217,13 @@ Usage from Sphinx
 -----------------
 
 It is discouraged to use ``setuptools_scm`` from Sphinx itself,
-instead use ``pkg_resources`` after editable/real installation:
+instead use ``importlib.metadata`` after editable/real installation:
 
 .. code:: python
 
     # contents of docs/conf.py
-    from pkg_resources import get_distribution
-    release = get_distribution('myproject').version
+    from importlib.metadata import version
+    release = version('myproject')
     # for example take major/minor
     version = '.'.join(release.split('.')[:2])
 
@@ -245,14 +231,39 @@ The underlying reason is, that services like *Read the Docs* sometimes change
 the working directory for good reasons and using the installed metadata
 prevents using needless volatile data there.
 
-Notable Plugins
----------------
 
-`setuptools_scm_git_archive <https://pypi.python.org/pypi/setuptools_scm_git_archive>`_
-    Provides partial support for obtaining versions from git archives that
-    belong to tagged versions. The only reason for not including it in
-    ``setuptools_scm`` itself is Git/GitHub not supporting sufficient metadata
-    for untagged/followup commits, which is preventing a consistent UX.
+Usage from Docker
+-----------------
+
+By default, docker will not copy the ``.git``  folder into your container.
+Therefore, builds with version inference might fail.
+Consequently, you can use the following snipped to infer the version from
+the host os without copying the entire ``.git`` folder to your Dockerfile.
+
+.. code:: dockerfile
+
+    RUN --mount=source=.git,target=.git,type=bind \
+        pip install --no-cache-dir -e .
+
+However, this build step introduces a dependency to the state of your local
+.git folder the build cache and triggers the long-running pip install process on every build.
+To optimize build caching, one can use an environment variable to pretend a pseudo
+version that is used to cache the results of the pip install process:
+
+.. code:: dockerfile
+
+    FROM python
+    COPY pyproject.toml
+    ARG PSEUDO_VERSION=1
+    RUN SETUPTOOLS_SCM_PRETEND_VERSION=${PSEUDO_VERSION} pip install -e .[test]
+    RUN --mount=source=.git,target=.git,type=bind pip install -e .
+
+Note that running this Dockerfile requires docker with BuildKit enabled
+`[docs] <https://github.com/moby/buildkit/blob/v0.8.3/frontend/dockerfile/docs/syntax.md>`_.
+
+To avoid BuildKit and mounting of the .git folder altogether, one can also pass the desired
+version as a build argument. Note that ``SETUPTOOLS_SCM_PRETEND_VERSION_FOR_${UPPERCASED_DIST_NAME}``
+is preferred over ``SETUPTOOLS_SCM_PRETEND_VERSION``.
 
 
 Default versioning scheme
@@ -278,9 +289,9 @@ distance and not clean:
 The next version is calculated by adding ``1`` to the last numeric component of
 the tag.
 
-
 For Git projects, the version relies on `git describe <https://git-scm.com/docs/git-describe>`_,
 so you will see an additional ``g`` prepended to the ``{revision hash}``.
+
 
 Semantic Versioning (SemVer)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -303,18 +314,41 @@ Builtin mechanisms for obtaining version numbers
 
 1. the SCM itself (git/hg)
 2. ``.hg_archival`` files (mercurial archives)
-3. ``PKG-INFO``
+3. ``.git_archival.txt`` files (git archives, see subsection below)
+4. ``PKG-INFO``
 
-.. note::
 
-    Git archives are not supported due to Git shortcomings
+Git archives
+~~~~~~~~~~~~
+
+Git archives are supported, but a few changes to your repository are required.
+
+Create a ``.git_archival.txt`` file in the root directory of your repository,
+and copy-paste this into it::
+
+    node: $Format:%H$
+    node-date: $Format:%cI$
+    describe-name: $Format:%(describe:tags=true,match=*[0-9]*)$
+    ref-names: $Format:%D$
+
+Create the ``.gitattributes`` file in the root directory of your repository
+if it doesn't already exist, and copy-paste this into it::
+
+    .git_archival.txt  export-subst
+
+Finally, don't forget to commit those two files::
+
+    git add .git_archival.txt .gitattributes && git commit
+
+Note that if you are creating a ``_version.py`` file, note that it should not
+be kept in version control.
 
 
 File finders hook makes most of MANIFEST.in unnecessary
 -------------------------------------------------------
 
 ``setuptools_scm`` implements a `file_finders
-<https://setuptools.readthedocs.io/en/latest/setuptools.html#adding-support-for-revision-control-systems>`_
+<https://setuptools.pypa.io/en/latest/userguide/extension.html#adding-support-for-revision-control-systems>`_
 entry point which returns all files tracked by your SCM. This eliminates
 the need for a manually constructed ``MANIFEST.in`` in most cases where this
 would be required when not using ``setuptools_scm``, namely:
@@ -351,7 +385,7 @@ The currently supported configuration keys are:
 
 :write_to:
     A path to a file that gets replaced with a file containing the current
-    version. It is ideal for creating a ``version.py`` file within the
+    version. It is ideal for creating a ``_version.py`` file within the
     package, typically used to avoid using `pkg_resources.get_distribution`
     (which adds some overhead).
 
@@ -411,6 +445,29 @@ The currently supported configuration keys are:
     Defaults to the value set by ``setuptools_scm.git.DEFAULT_DESCRIBE``
     (see `git.py <src/setuptools_scm/git.py>`_).
 
+:normalize:
+    A boolean flag indicating if the version string should be normalized.
+    Defaults to ``True``. Setting this to ``False`` is equivalent to setting
+    ``version_cls`` to ``setuptools_scm.version.NonNormalizedVersion``
+
+:version_cls:
+    An optional class used to parse, verify and possibly normalize the version
+    string. Its constructor should receive a single string argument, and its
+    ``str`` should return the normalized version string to use.
+    This option can also receive a class qualified name as a string.
+
+    This defaults to ``packaging.version.Version`` if available. If
+    ``packaging`` is not installed, ``pkg_resources.packaging.version.Version``
+    is used. Note that it is known to modify git release candidate schemes.
+
+    The ``setuptools_scm.NonNormalizedVersion`` convenience class is
+    provided to disable the normalization step done by
+    ``packaging.version.Version``. If this is used while ``setuptools_scm``
+    is integrated in a setuptools packaging process, the non-normalized
+    version number will appear in all files (see ``write_to``) BUT note
+    that setuptools will still normalize it to create the final distribution,
+    so as to stay compliant with the python packaging standards.
+
 To use ``setuptools_scm`` in other Python code you can use the ``get_version``
 function:
 
@@ -430,11 +487,12 @@ Example configuration in ``setup.py`` format:
 
     setup(
         use_scm_version={
-            'write_to': 'version.py',
+            'write_to': '_version.py',
             'write_to_template': '__version__ = "{version}"',
             'tag_regex': r'^(?P<prefix>v)?(?P<version>[^\+]+)(?P<suffix>.*)?$',
         }
     )
+
 
 Environment variables
 ---------------------
@@ -444,14 +502,12 @@ Environment variables
     its used as the primary source for the version number
     in which case it will be a unparsed string
 
-
 :SETUPTOOLS_SCM_PRETEND_VERSION_FOR_${UPPERCASED_DIST_NAME}:
     when defined and not empty,
     its used as the primary source for the version number
     in which case it will be a unparsed string
 
     it takes precedence over ``SETUPTOOLS_SCM_PRETEND_VERSION``
-
 
 :SETUPTOOLS_SCM_DEBUG:
     when defined and not empty,
@@ -464,16 +520,17 @@ Environment variables
     derived, otherwise the current time is used
     (https://reproducible-builds.org/docs/source-date-epoch/)
 
-
 :SETUPTOOLS_SCM_IGNORE_VCS_ROOTS:
     when defined, a ``os.pathsep`` separated list
     of directory names to ignore for root finding
+
 
 Extending setuptools_scm
 ------------------------
 
 ``setuptools_scm`` ships with a few ``setuptools`` entrypoints based hooks to
 extend its default capabilities.
+
 
 Adding a new SCM
 ~~~~~~~~~~~~~~~~
@@ -495,6 +552,7 @@ Adding a new SCM
   pathname will return that list.
 
   Also use then name of your SCM control directory as name of the entrypoint.
+
 
 Version number construction
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -551,7 +609,6 @@ is supported.
 Within that callable, ``setuptools_scm`` is available for import.
 The callable must return the configuration.
 
-
 .. code:: python
 
     # content of setup.py
@@ -589,10 +646,6 @@ Interaction with Enterprise Distributions
 Some enterprise distributions like RHEL7 and others
 ship rather old setuptools versions due to various release management details.
 
-On such distributions one might observe errors like:
-
-:code:``setuptools_scm.version.SetuptoolsOutdatedWarning: your setuptools is too old (<12)``
-
 In those case its typically possible to build by using a sdist against ``setuptools_scm<2.0``.
 As those old setuptools versions lack sensible types for versions,
 modern setuptools_scm is unable to support them sensibly.
@@ -600,8 +653,6 @@ modern setuptools_scm is unable to support them sensibly.
 In case the project you need to build can not be patched to either use old setuptools_scm,
 its still possible to install a more recent version of setuptools in order to handle the build
 and/or install the package by using wheels or eggs.
-
-
 
 
 Code of Conduct
@@ -612,6 +663,7 @@ trackers, chat rooms, and mailing lists is expected to follow the
 `PSF Code of Conduct`_.
 
 .. _PSF Code of Conduct: https://github.com/pypa/.github/blob/main/CODE_OF_CONDUCT.md
+
 
 Security Contact
 ================
