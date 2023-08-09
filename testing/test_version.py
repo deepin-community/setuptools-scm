@@ -1,17 +1,21 @@
-from datetime import date, timedelta
+from __future__ import annotations
+
+from datetime import date
+from datetime import timedelta
+from typing import Any
 
 import pytest
+
 from setuptools_scm.config import Configuration
-from setuptools_scm.version import (
-    meta,
-    simplified_semver_version,
-    release_branch_semver_version,
-    tags_to_versions,
-    no_guess_dev_version,
-    guess_next_version,
-    format_version,
-    calver_by_date,
-)
+from setuptools_scm.version import calver_by_date
+from setuptools_scm.version import format_version
+from setuptools_scm.version import guess_next_version
+from setuptools_scm.version import meta
+from setuptools_scm.version import no_guess_dev_version
+from setuptools_scm.version import release_branch_semver_version
+from setuptools_scm.version import ScmVersion
+from setuptools_scm.version import simplified_semver_version
+from setuptools_scm.version import tags_to_versions
 
 
 c = Configuration()
@@ -49,16 +53,16 @@ c = Configuration()
         ),
     ],
 )
-def test_next_semver(version, expected_next):
+def test_next_semver(version: ScmVersion, expected_next: str) -> None:
     computed = simplified_semver_version(version)
     assert computed == expected_next
 
 
-def test_next_semver_bad_tag():
+def test_next_semver_bad_tag() -> None:
 
     version = meta("1.0.0-foo", preformatted=True, config=c)
     with pytest.raises(
-        ValueError, match="1.0.0-foo can't be parsed as numeric version"
+        ValueError, match=r"1\.0\.0-foo.* can't be parsed as numeric version"
     ):
         simplified_semver_version(version)
 
@@ -83,6 +87,11 @@ def test_next_semver_bad_tag():
             id="release_branch_legacy_version",
         ),
         pytest.param(
+            meta("1.0.0", distance=2, branch="v1.0.x", config=c),
+            "1.0.1.dev2",
+            id="release_branch_with_v_prefix",
+        ),
+        pytest.param(
             meta("1.0.0", distance=2, branch="release-1.0", config=c),
             "1.0.1.dev2",
             id="release_branch_with_prefix",
@@ -94,61 +103,80 @@ def test_next_semver_bad_tag():
         ),
     ],
 )
-def test_next_release_branch_semver(version, expected_next):
+def test_next_release_branch_semver(version: ScmVersion, expected_next: str) -> None:
     computed = release_branch_semver_version(version)
     assert computed == expected_next
+
+
+def m(tag: str, **kw: Any) -> ScmVersion:
+    return meta(tag, **kw, config=c)
 
 
 @pytest.mark.parametrize(
     "version, expected_next",
     [
         pytest.param(
-            meta("1.0.0", distance=2, branch="default", config=c),
+            m("1.0.0", distance=2),
             "1.0.0.post1.dev2",
             id="dev_distance",
         ),
         pytest.param(
-            meta("1.0", distance=2, branch="default", config=c),
+            m("1.0.dev0", distance=2), "1.0.dev2", id="dev_distance_after_dev_tag"
+        ),
+        pytest.param(
+            m("1.0", distance=2),
             "1.0.post1.dev2",
             id="dev_distance_short_tag",
         ),
         pytest.param(
-            meta("1.0.0", distance=None, branch="default", config=c),
+            m("1.0.0"),
             "1.0.0",
             id="no_dev_distance",
         ),
     ],
 )
-def test_no_guess_version(version, expected_next):
+def test_no_guess_version(version: ScmVersion, expected_next: str) -> None:
     computed = no_guess_dev_version(version)
     assert computed == expected_next
 
 
-def test_bump_dev_version_zero():
-    guess_next_version("1.0.dev0")
+@pytest.mark.parametrize(
+    "version, match",
+    [
+        ("1.0.dev1", "choosing custom numbers for the `.devX` distance"),
+        ("1.0.post1", "already is a post release"),
+    ],
+)
+def test_no_guess_version_bad(version: str, match: str) -> None:
+    with pytest.raises(ValueError, match=match):
+        no_guess_dev_version(m(version, distance=1))
 
 
-def test_bump_dev_version_nonzero_raises():
+def test_bump_dev_version_zero() -> None:
+    assert guess_next_version(m("1.0.dev0")) == "1.0"
+
+
+def test_bump_dev_version_nonzero_raises() -> None:
     with pytest.raises(ValueError) as excinfo:
-        guess_next_version("1.0.dev1")
+        guess_next_version(m("1.0.dev1"))
 
     assert str(excinfo.value) == (
         "choosing custom numbers for the `.devX` distance "
         "is not supported.\n "
         "The 1.0.dev1 can't be bumped\n"
-        "Please drop the tag or create a new supported one"
+        "Please drop the tag or create a new supported one ending in .dev0"
     )
 
 
 @pytest.mark.parametrize(
     "tag, expected",
     [
-        pytest.param("v1.0.0", "1.0.0"),
-        pytest.param("v1.0.0-rc.1", "1.0.0rc1"),
-        pytest.param("v1.0.0-rc.1+-25259o4382757gjurh54", "1.0.0rc1"),
+        ("v1.0.0", "1.0.0"),
+        ("v1.0.0-rc.1", "1.0.0rc1"),
+        ("v1.0.0-rc.1+-25259o4382757gjurh54", "1.0.0rc1"),
     ],
 )
-def test_tag_regex1(tag, expected):
+def test_tag_regex1(tag: str, expected: str) -> None:
     if "+" in tag:
         # pytest bug wrt cardinality
         with pytest.warns(UserWarning):
@@ -160,23 +188,33 @@ def test_tag_regex1(tag, expected):
 
 
 @pytest.mark.issue("https://github.com/pypa/setuptools_scm/issues/286")
-def test_tags_to_versions():
+def test_tags_to_versions() -> None:
     versions = tags_to_versions(["1.0", "2.0", "3.0"], config=c)
     assert isinstance(versions, list)  # enable subscription
 
 
 @pytest.mark.issue("https://github.com/pypa/setuptools_scm/issues/471")
-def test_version_bump_bad():
+def test_version_bump_bad() -> None:
+    class YikesVersion:
+        val: str
+
+        def __init__(self, val: str):
+            self.val = val
+
+        def __str__(self) -> str:
+            return self.val
+
+    config = Configuration(version_cls=YikesVersion)
     with pytest.raises(
         ValueError,
         match=".*does not end with a number to bump, "
         "please correct or use a custom version scheme",
     ):
 
-        guess_next_version(tag_version="2.0.0-alpha.5-PMC")
+        guess_next_version(tag_version=meta("2.0.0-alpha.5-PMC", config=config))
 
 
-def test_format_version_schemes():
+def test_format_version_schemes() -> None:
     version = meta("1.0", config=c)
     format_version(
         version,
@@ -185,7 +223,11 @@ def test_format_version_schemes():
     )
 
 
-def date_to_str(date_=None, days_offset=0, fmt="{dt:%y}.{dt.month}.{dt.day}"):
+def date_to_str(
+    date_: date | None = None,
+    days_offset: int = 0,
+    fmt: str = "{dt:%y}.{dt.month}.{dt.day}",
+) -> str:
     date_ = date_ or date.today()
     date_ = date_ - timedelta(days=days_offset)
     return fmt.format(dt=date_)
@@ -203,7 +245,7 @@ def date_to_str(date_=None, days_offset=0, fmt="{dt:%y}.{dt.month}.{dt.day}"):
             meta(date_to_str() + ".1", config=c), date_to_str() + ".1", id="exact patch"
         ),
         pytest.param(
-            meta(date_to_str(fmt="20.01.02"), config=c),
+            meta("20.01.02", config=c),
             "20.1.2",
             id="leading 0s",
         ),
@@ -251,9 +293,22 @@ def date_to_str(date_=None, days_offset=0, fmt="{dt:%y}.{dt.month}.{dt.day}"):
             date_to_str(date.today() - timedelta(days=2)) + ".3.dev2",
             id="node date distance",
         ),
+        pytest.param(
+            meta(
+                "1.2.0",
+                config=c,
+                distance=2,
+                node_date=date.today() - timedelta(days=2),
+            ),
+            date_to_str(days_offset=2) + ".0.dev2",
+            marks=pytest.mark.filterwarnings(
+                "ignore:.*not correspond to a valid versioning date.*:UserWarning"
+            ),
+            id="using on old version tag",
+        ),
     ],
 )
-def test_calver_by_date(version, expected_next):
+def test_calver_by_date(version: ScmVersion, expected_next: str) -> None:
     computed = calver_by_date(version)
     assert computed == expected_next
 
@@ -270,11 +325,30 @@ def test_calver_by_date(version, expected_next):
         ),
     ],
 )
-def test_calver_by_date_semver(version, expected_next):
+def test_calver_by_date_semver(version: ScmVersion, expected_next: str) -> None:
     computed = calver_by_date(version)
     assert computed == expected_next
 
 
-def test_calver_by_date_future_warning():
+def test_calver_by_date_future_warning() -> None:
     with pytest.warns(UserWarning, match="your previous tag*"):
         calver_by_date(meta(date_to_str(days_offset=-2), config=c, distance=2))
+
+
+def test_custom_version_cls() -> None:
+    """Test that we can pass our own version class instead of pkg_resources"""
+
+    class MyVersion:
+        def __init__(self, tag_str: str):
+            self.tag = tag_str
+
+        def __str__(self) -> str:
+            return "Custom %s" % self.tag
+
+        def __repr__(self) -> str:
+            return "MyVersion<Custom%s>" % self.tag
+
+    scm_version = meta("1.0.0-foo", config=Configuration(version_cls=MyVersion))
+
+    assert isinstance(scm_version.tag, MyVersion)
+    assert str(scm_version.tag) == "Custom 1.0.0-foo"

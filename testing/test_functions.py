@@ -1,15 +1,20 @@
-import pytest
-import pkg_resources
-from setuptools_scm import dump_version, get_version, PRETEND_KEY
-from setuptools_scm.version import (
-    guess_next_version,
-    meta,
-    format_version,
-    tag_to_version,
-)
+from __future__ import annotations
 
+from pathlib import Path
+
+import pytest
+
+from setuptools_scm import dump_version
+from setuptools_scm import get_version
+from setuptools_scm import PRETEND_KEY
 from setuptools_scm.config import Configuration
 from setuptools_scm.utils import has_command
+from setuptools_scm.version import format_version
+from setuptools_scm.version import guess_next_version
+from setuptools_scm.version import meta
+from setuptools_scm.version import tag_to_version
+
+c = Configuration()
 
 
 @pytest.mark.parametrize(
@@ -18,15 +23,19 @@ from setuptools_scm.utils import has_command
         ("1.1", "1.2"),
         ("1.2.dev", "1.2"),
         ("1.1a2", "1.1a3"),
-        ("23.24.post2+deadbeef", "23.24.post3"),
+        pytest.param(
+            "23.24.post2+deadbeef",
+            "23.24.post3",
+            marks=pytest.mark.filterwarnings(
+                "ignore:.*will be stripped of its suffix.*:UserWarning"
+            ),
+        ),
     ],
 )
-def test_next_tag(tag, expected):
-    version = pkg_resources.parse_version(tag)
+def test_next_tag(tag: str, expected: str) -> None:
+    version = meta(tag, config=c)
     assert guess_next_version(version) == expected
 
-
-c = Configuration()
 
 VERSIONS = {
     "exact": meta("1.1", distance=None, dirty=False, config=c),
@@ -55,33 +64,34 @@ VERSIONS = {
         ("distancedirty", "post-release node-and-date", "1.1.post3+d20090213"),
     ],
 )
-def test_format_version(version, scheme, expected):
-    version = VERSIONS[version]
+def test_format_version(version: str, scheme: str, expected: str) -> None:
+    scm_version = VERSIONS[version]
     vs, ls = scheme.split()
-    assert format_version(version, version_scheme=vs, local_scheme=ls) == expected
+    assert format_version(scm_version, version_scheme=vs, local_scheme=ls) == expected
 
 
-def test_dump_version_doesnt_bail_on_value_error(tmpdir):
+def test_dump_version_doesnt_bail_on_value_error(tmp_path: Path) -> None:
     write_to = "VERSION"
     version = str(VERSIONS["exact"].tag)
-    with pytest.raises(ValueError) as exc_info:
-        dump_version(tmpdir.strpath, version, write_to)
-    assert str(exc_info.value).startswith("bad file format:")
+    with pytest.raises(ValueError, match="^bad file format:"):
+        dump_version(tmp_path, version, write_to)
 
 
 @pytest.mark.parametrize(
     "version", ["1.0", "1.2.3.dev1+ge871260", "1.2.3.dev15+ge871260.d20180625"]
 )
-def test_dump_version_works_with_pretend(version, tmpdir, monkeypatch):
+def test_dump_version_works_with_pretend(
+    version: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv(PRETEND_KEY, version)
-    get_version(write_to=str(tmpdir.join("VERSION.txt")))
-    assert tmpdir.join("VERSION.txt").read() == version
+    target = tmp_path.joinpath("VERSION.txt")
+    get_version(write_to=target)
+    assert target.read_text() == version
 
 
-def test_has_command(recwarn):
-    assert not has_command("yadayada_setuptools_aint_ne")
-    msg = recwarn.pop()
-    assert "yadayada" in str(msg.message)
+def test_has_command() -> None:
+    with pytest.warns(RuntimeWarning, match="yadayada"):
+        assert not has_command("yadayada_setuptools_aint_ne")
 
 
 @pytest.mark.parametrize(
@@ -92,6 +102,6 @@ def test_has_command(recwarn):
         pytest.param("3.3.1-rc26", "3.3.1rc26", marks=pytest.mark.issue(266)),
     ],
 )
-def test_tag_to_version(tag, expected_version):
+def test_tag_to_version(tag: str, expected_version: str) -> None:
     version = str(tag_to_version(tag))
     assert version == expected_version
